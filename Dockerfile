@@ -2,15 +2,24 @@ FROM centos
 # Install dependecies
 RUN yum -y install http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum -y groupinstall 'Development Tools'
-RUN yum -y install python-virtualenv libffi-devel libcurl-devel cmake autoreconf git curl http-parser-devel libgpg-error-devel zlib-devel perl-core
+RUN yum -y install python-virtualenv libffi-devel libcurl-devel cmake autoreconf git curl http-parser-devel libgpg-error-devel zlib-devel perl-core lksctp-tools-devel
 
 # Compile OpenSSL 1.1.1 (ed25519 support)
 RUN curl -o /tmp/openssl.tar.gz https://www.openssl.org/source/openssl-1.1.1.tar.gz
 RUN tar -xvf /tmp/openssl.tar.gz -C /tmp/
 WORKDIR "/tmp/openssl-1.1.1"
-RUN ./config prefix=/usr/local/ssl openssldir=/usr/local/ssl shared zlib
+ADD ca-dir.patch .
+RUN patch -p0 -i ca-dir.patch
+RUN ./Configure \
+        --prefix=/usr --openssldir=/etc/pki/tls enable-ec_nistp_64_gcc_128 \
+	zlib enable-camellia enable-seed enable-rfc3779 enable-sctp \
+	enable-cms enable-md2 enable-rc5 enable-ssl3 enable-ssl3-method \
+	enable-weak-ssl-ciphers \
+	no-mdc2 no-ec2m no-sm2 no-sm4 \
+	shared linux-x86_64
+
 RUN make && make install
-RUN /bin/cp -rf /usr/local/lib64/* /lib64/ && ldconfig
+RUN /bin/cp -rf /usr/lib/* /lib64/ && ldconfig
 
 # Compile libssh2 (ed25519 support)
 RUN git clone https://github.com/libssh2/libssh2.git /tmp/libssh2 && cd /tmp/libssh2 && git reset --hard cf13c9925c42e6e9eeaa6525f43aedc9ed2df9ec
@@ -33,4 +42,5 @@ RUN ls
 WORKDIR "/tmp/pygit2"
 RUN virtualenv .
 RUN bash -c "source bin/activate && pip install --upgrade pip && pip install pygit2 && python -c 'import pygit2'"
+
 CMD "/bin/bash"
